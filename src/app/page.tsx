@@ -31,17 +31,11 @@ export default function Page() {
   const [tab, setTab] = useState<Tab>("home");
   const [battle, setBattle] = useState<BattleStart | null>(null);
 
-  // música según contexto
+  // Música según contexto: login y menú comparten pista (sin reinicios al navegar);
+  // sólo cambia al entrar/salir de un combate.
   useEffect(() => {
-    if (!authed) return;
-    const start = () => {
-      getAudio().init();
-      getAudio().playMusic(battle ? "battle" : "menu");
-    };
-    start();
-    window.addEventListener("pointerdown", start, { once: true });
-    return () => window.removeEventListener("pointerdown", start);
-  }, [authed, battle]);
+    getAudio().playMusic(battle ? "battle" : "menu");
+  }, [battle]);
 
   // regeneración de energía visible
   useEffect(() => {

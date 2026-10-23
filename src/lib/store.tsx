@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ApiError, api, getToken, setToken, type GameState } from "./api";
 import { getAudio } from "@/game/audio";
+import { mergeServerPrefs } from "./prefs";
 
 export interface Toast { id: number; msg: string; kind: "ok" | "err" | "gold" }
 
@@ -30,6 +31,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [booting, setBooting] = useState(true);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const refreshing = useRef(false);
+  const prefsSynced = useRef(false); // los ajustes del servidor se aplican una vez por sesión
   const offset = useRef(0); // serverNow - Date.now() en el último estado recibido
   const serverNow = useCallback(() => Date.now() + offset.current, []);
 
@@ -47,7 +49,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (s.afk?.serverNow) offset.current = s.afk.serverNow - Date.now();
       setState(s);
       setAuthed(true);
-      getAudio().setVolumes(s.player.settings.music, s.player.settings.sfx);
+      if (!prefsSynced.current) {
+        prefsSynced.current = true;
+        const st = s.player.settings;
+        getAudio().setVolumes(st.music, st.sfx);
+        if (typeof st.muted === "boolean") getAudio().setMuted(st.muted);
+        mergeServerPrefs(st);
+      }
     } catch (error) {
       // No desmontar el juego por una pérdida momentánea de red móvil.
       if (error instanceof ApiError && error.status === 401) {
@@ -58,6 +66,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } finally {
       refreshing.current = false;
     }
+  }, []);
+
+  // Música de pantalla inicial/login/menú: se arranca en el primer gesto del usuario
+  // (política de autoplay) y NO se reinicia al autenticarse ni al navegar.
+  useEffect(() => {
+    const a = getAudio();
+    a.attachGlobalHandlers();
+    a.playMusic("menu");
   }, []);
 
   useEffect(() => {
@@ -84,7 +100,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
     setState(null);
     setAuthed(false);
-    getAudio().playMusic(null);
+    prefsSynced.current = false;
+    getAudio().playMusic("menu"); // la pista de inicio de sesión es la misma del menú
   }, []);
 
   return (
