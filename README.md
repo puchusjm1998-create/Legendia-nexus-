@@ -32,6 +32,15 @@ Abre `http://localhost:3000`, crea una cuenta y juega. Empiezas con **4 héroes,
 
 El panel de administración está en **`/admin`** (usa las credenciales de entorno). Nunca hay contraseñas admin escritas en el código.
 
+## 🆕 Novedades v1.2
+
+- **Expediciones AFK** (pestaña «AFK»): 6 expediciones (2 h–12 h) con requisitos de nivel/poder, 1–3 héroes (más huecos al subir de nivel), bonos por especialistas, recompensas de oro/EXP/materiales/fragmentos. Tiempo por marcas del **servidor**, tope de 12 h, reclamo parcial sin duplicados (`src/game/afk.ts`, `src/server/afk.ts`, `api/afk/*`). Economía configurable en `AFK_CONFIG`.
+- **Combate 3D** (Three.js, carga bajo demanda): héroes chibi procedurales con esqueleto y animaciones propias, escenarios por misión, cámara dinámica, ultimates cinemáticas (daño en el clímax), VFX por elemento, velocidad ×1/×1.5/×2, botón Saltar, calidad Auto/Alta/Ligera y **fallback 2D clásico** (`src/game3d/*`, `src/components/Battle.tsx`). La escena solo reproduce los *frames* que calcula el servidor.
+- **Sinergias de formación** (`src/game/synergy.ts`) y «Esperar» = guardia.
+- **Fragmentos de personaje** (desbloqueo/resonancia) y visor 3D en la ficha.
+- **Música**: pista de menú/login continua + pista de combate, volumen/silencio, soporte móvil; sustituible con tus archivos en `public/audio` (ver `public/audio/README.md`).
+- **Modelos propios**: ver `public/models/README.md`.
+
 ## 🎮 Contenido
 
 - **Combate táctico 7×5 decidido en el servidor**: movimiento validado por casillas, iniciativa por velocidad, chakra, combos por aliados adyacentes (+10% cada uno), críticos, ventajas elementales (🔥→🌪️→⚡→💧→🔥; ✨↔🌑), estados, regeneración, IA ofensiva y sanadora, jefes con **fase 2** al 50% de vida.
@@ -126,6 +135,17 @@ GAME_URL=https://TU-DOMINIO.com node scripts/smoke-game.mjs
 La prueba registra una cuenta temporal, hace login, daily, invoca, verifica que `/api/admin/*` devuelve 403, que una victoria falsa devuelve 400, que un movimiento imposible devuelve 400, que una revisión repetida devuelve 409 y que solo hay una batalla activa. Después juega una misión completa mediante acciones legales, verifica daño y recompensa persistente, carga una definitiva real, se retira y vuelve a entrar para comprobar el guardado.
 
 Se probaron además en vivo: caducidad de eventos y bloqueo de misión sin descontar energía (con restauración del evento), compilación TypeScript, build de producción y `/api/health`.
+
+### Pruebas end-to-end con navegador (v1.2)
+
+```bash
+node scripts/test-afk.mjs                 # AFK: 12 h, doble reclamo, requisitos, conflictos
+# Requieren Chromium: define CHROME_PATH o E2E_TOOLS=/ruta/con/puppeteer-core+@sparticuz/chromium
+E2E_TOOLS=... node scripts/e2e/music.mjs      # música sin reinicios
+E2E_TOOLS=... node scripts/e2e/battle3d.mjs   # batalla 3D completa por la UI (ULT=1 fuerza definitivas)
+E2E_TOOLS=... node scripts/e2e/battle2d.mjs   # modo 2D clásico
+E2E_TOOLS=... node scripts/e2e/ui3d.mjs       # sinergias en Equipo y visor 3D
+```
 
 ## 🟡 Trabajo todavía pendiente
 

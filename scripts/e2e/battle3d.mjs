@@ -40,11 +40,12 @@ await page.mouse.click(10, 10);
 await clickText(page, "Batalla en curso", "button").catch(async () => { await page.screenshot({ path: SHOTS + "/err-home.png" }); throw new Error("sin botón reanudar"); });
 await page.waitForFunction(() => !!window.__nexusStage, { timeout: 60000 });
 ok(true, "escenario 3D creado");
+{ const d = await page.evaluate(() => window.__nexusAudio.debug()); ok(d.track === "battle" && d.starts.battle === 1, `música de combate activa y una sola vez (track=${d.track}, starts.battle=${d.starts.battle})`); }
 const shot = async (n) => page.screenshot({ path: `${SHOTS}/${n}.png` });
 await sleep(800); await shot("01-intro");
 await page.waitForFunction(() => document.body.textContent.includes("Tu turno"), { timeout: 60000 });
 await sleep(500); await shot("02-play");
-const info = await page.evaluate(() => { const s = window.__nexusStage; return { views: s.views.size, layout: s.layout, q: s.quality }; });
+const info = await page.evaluate(() => { const s = window.__nexusStage; const d = s.debug(); return { views: s.views.size, layout: s.layout, q: s.quality, drawCalls: d.calls, triangles: d.tris, geometries: d.geos }; });
 console.log("  stage:", JSON.stringify(info));
 ok(info.views >= 3, "unidades en escena: " + info.views);
 
@@ -111,5 +112,11 @@ console.log(`  comprobaciones escena==servidor: ${checks}, desincronías: ${mism
 ok(checks > 0 && mismatches === 0, "la escena 3D siempre muestra el estado real del servidor (también tras Saltar)");
 console.log("  resultado:", endTxt, "· definitivas lanzadas:", ults);
 ok(endTxt !== "sin resultado", "la batalla 3D termina con pantalla de resultado");
+if (endTxt !== "sin resultado") {
+  await clickText(page, "Continuar");
+  await sleep(1800);
+  const d = await page.evaluate(() => window.__nexusAudio.debug());
+  ok(d.track === "menu" && d.menuPlaying && !d.battlePlaying, `al salir del combate vuelve la música del menú (menuPlaying=${d.menuPlaying}, battlePlaying=${d.battlePlaying})`);
+}
 await browser.close();
 process.exit(failures ? 1 : 0);

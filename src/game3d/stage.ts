@@ -691,7 +691,7 @@ export class BattleStage {
   screenOfUnit(uid: number) { const v = this.views.get(uid); return v ? this.screenPoint(this.chest(v)) : null; }
   screenOfTile(x: number, y: number) { return this.screenPoint(this.worldPos(x, y)); }
   debug() {
-    return { layout: this.layout, quality: this.quality, rush: this.rush, playing: this.playing, units: [...this.views.values()].map((v) => ({ uid: v.uid, clip: v.rig.clip, alive: v.alive, hp: v.data.hp })), cam: this.cam.camera.position.toArray(), fov: this.cam.currentFov };
+    return { layout: this.layout, quality: this.quality, rush: this.rush, playing: this.playing, units: [...this.views.values()].map((v) => ({ uid: v.uid, clip: v.rig.clip, alive: v.alive, hp: v.data.hp })), cam: this.cam.camera.position.toArray(), fov: this.cam.currentFov, calls: this.renderer.info.render.calls, tris: this.renderer.info.render.triangles, geos: this.renderer.info.memory.geometries };
   }
 
   // ---------------- bucle ----------------

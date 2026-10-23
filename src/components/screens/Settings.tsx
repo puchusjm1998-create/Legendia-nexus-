@@ -100,6 +100,10 @@ export function SettingsScreen() {
           <li><b className="text-cyan-300">Combate:</b> por turnos de velocidad. Toca casillas azules para moverte, elige acción (⚔️ atacar, ✦ habilidad, 💥 definitiva) y toca un objetivo resaltado.</li>
           <li><b className="text-cyan-300">Chakra ⬡:</b> las habilidades lo consumen; recuperas 1 por turno.</li>
           <li><b className="text-cyan-300">Definitiva:</b> la barra de energía se llena atacando y recibiendo daño. Al 100% desatas una técnica cinematográfica.</li>
+          <li><b className="text-cyan-300">Animación:</b> el combate es 3D. Usa <b>×1/×1.5/×2</b> para la velocidad y <b>⏩ Saltar</b> para saltar la animación en curso (el resultado y el daño son siempre los reales del servidor). Si tu móvil va justo, elige calidad «Ligera» o «2D clásico».</li>
+          <li><b className="text-cyan-300">Defender:</b> «Esperar» pone al héroe en guardia: +10 de energía y +30% DEF hasta su próximo turno.</li>
+          <li><b className="text-cyan-300">Sinergias:</b> combinar héroes del mismo universo/elemento o roles complementarios da bonos automáticos (se ven en Equipo y en combate).</li>
+          <li><b className="text-cyan-300">Expediciones AFK:</b> envía héroes a recolectar hasta 12 h; el tiempo lo cuenta el servidor y puedes reclamar parcialmente.</li>
           <li><b className="text-cyan-300">Combos:</b> atacar a un enemigo rodeado por tus aliados da +10% de daño por aliado adyacente.</li>
           <li><b className="text-cyan-300">Elementos:</b> 🔥→🌪️→⚡→💧→ (×1.5 de daño). ✨ y 🌑 se contrarrestan entre sí.</li>
           <li><b className="text-cyan-300">Jefes:</b> al 50% de vida entran en fase 2 y se vuelven más peligrosos.</li>
@@ -110,7 +114,7 @@ export function SettingsScreen() {
 
       <div className="tile-cut border border-white/10 bg-[#0d1730] p-4 text-xs leading-relaxed text-slate-400">
         <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">ℹ️ Acerca de</p>
-        <p><b className="text-slate-200">Legendia Nexus</b> — servidor privado v1.1. RPG táctico con personajes, historia, transformaciones y música 100% originales inspirados en el espíritu de los grandes RPG de anime.</p>
+        <p><b className="text-slate-200">Legendia Nexus</b> — servidor privado v1.2. RPG táctico con personajes, historia, transformaciones y música 100% originales inspirados en el espíritu de los grandes RPG de anime.</p>
         <p className="mt-2">📱 Optimizado para navegadores Android. Puede empaquetarse como APK con Capacitor (instrucciones en el README del proyecto).</p>
         <p className="mt-2">💾 Todo tu progreso se guarda en la base de datos del servidor, no en el navegador.</p>
       </div>

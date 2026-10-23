@@ -7,12 +7,14 @@ import {
 import { api } from "@/lib/api";
 import { useGame } from "@/lib/store";
 import { Portrait, RarityStars } from "./Portrait";
+import { ModelViewer } from "./ModelViewer";
 import { Btn, ElementChip, Modal, StatRow } from "./ui";
 import { getAudio } from "@/game/audio";
 
 export function CharDetail({ charKey, onClose }: { charKey: string; onClose: () => void }) {
   const { state, refresh, toast } = useGame();
   const [busy, setBusy] = useState(false);
+  const [view3d, setView3d] = useState(false);
   const def = CHAR_MAP[charKey];
   const owned = state?.chars.find((c) => c.charKey === charKey);
   const mult = state?.overrides.find((o) => o.charKey === charKey)?.mult;
@@ -45,7 +47,8 @@ export function CharDetail({ charKey, onClose }: { charKey: string; onClose: () 
         <div className="relative h-52 overflow-hidden">
           <div className="absolute inset-0 opacity-30" style={{ background: `radial-gradient(circle at 70% 20%, ${def.color}, transparent 70%)` }} />
           <div className="absolute right-3 top-3 h-44 w-44 overflow-hidden rounded-lg anim-float" style={{ boxShadow: `0 0 34px ${def.color}66` }}>
-            <Portrait charKey={charKey} transformed={owned?.transformed} dim={!owned} />
+            {view3d ? <ModelViewer charKey={charKey} transformed={owned?.transformed} /> : <Portrait charKey={charKey} transformed={owned?.transformed} dim={!owned} />}
+            <button onClick={() => setView3d((v) => !v)} className="absolute bottom-1 right-1 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-bold text-cyan-200">{view3d ? "🖼 Retrato" : "🧊 Modelo 3D"}</button>
           </div>
           <div className="absolute bottom-3 left-4 max-w-[55%]">
             <RarityStars rarity={def.rarity} className="text-lg" />

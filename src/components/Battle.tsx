@@ -75,13 +75,14 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
   const [errorMessage, setErrorMessage] = useState("");
   const busyRef = useRef(false);
   const mounted = useRef(true);
-  const [mode, setMode] = useState<"pending" | "3d" | "2d">("pending");
+  const [mode, setMode] = useState<"pending" | "3d" | "2d">(() => (resolveQuality(getCombatPrefs().quality) === "2d" ? "2d" : "3d"));
   const [speed, setSpeed] = useState<number>(() => getCombatPrefs().animSpeed);
   const speedRef = useRef(speed);
   const hostRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<BattleStage | null>(null);
   const pickRef = useRef<(p: StagePick) => void>(() => {});
   const introDone = useRef(false);
+  const showBannerRef = useRef<(t: string, ms?: number) => Promise<void>>(async () => {});
   const nap = useCallback((ms: number) => sleep(ms / speedRef.current), []);
 
   const startPlay = useCallback(() => {
@@ -98,8 +99,6 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
     mounted.current = true;
     introDone.current = false;
     getAudio().playMusic("battle");
-    const q = resolveQuality(getCombatPrefs().quality);
-    setMode(q === "2d" ? "2d" : "3d");
     return () => { mounted.current = false; };
   }, [data.token]);
 
@@ -169,8 +168,7 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
     await nap(ms);
     if (mounted.current) setBanner(null);
   }, [nap]);
-  const showBannerRef = useRef(showBanner);
-  showBannerRef.current = showBanner;
+  useEffect(() => { showBannerRef.current = showBanner; }, [showBanner]);
 
   const animate = useCallback(async (f: BattleFrame) => {
     if (!mounted.current) return;
@@ -310,7 +308,7 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
     setAction(action === type ? null : type);
   };
   const cellW = 100 / GRID_W, cellH = 100 / GRID_H;
-  pickRef.current = (p) => {
+  useEffect(() => { pickRef.current = (p) => {
     if (busyRef.current || !isPlayerTurn || !current) return;
     if (p.kind === "tile") {
       if (moveTiles.some((t) => t.x === p.x && t.y === p.y)) send({ type: "move", x: p.x, y: p.y });
@@ -321,14 +319,14 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
     if (action) { onUnitTap(u); return; }
     // Atajo táctil: tocar un enemigo al alcance sin acción elegida = ataque básico.
     if (u.side === "enemy" && u.alive && dist(u, current) <= current.range) send({ type: "attack", targetUid: u.uid });
-  };
-  if (stageRef.current) {
-    stageRef.current.setInteraction({
+  }; });
+  useEffect(() => {
+    stageRef.current?.setInteraction({
       moveTiles: moveTiles.map((t) => ({ x: t.x, y: t.y })),
       targets: validTargets.map((u) => ({ uid: u.uid, kind: u.side === "enemy" ? "enemy" as const : "ally" as const })),
       currentUid: match.currentUid,
     });
-  }
+  });
   const cycleSpeed = () => {
     const next = speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1;
     setSpeed(next); speedRef.current = next;

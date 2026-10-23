@@ -6,6 +6,7 @@ import { useGame } from "@/lib/store";
 import { Portrait, RarityStars } from "../Portrait";
 import { Btn, SectionTitle } from "../ui";
 import { CharDetail } from "../CharDetail";
+import { combineBonus, describeBonus, evaluateSynergies } from "@/game/synergy";
 
 export function TeamScreen() {
   const { state, refresh, toast } = useGame();
@@ -16,6 +17,8 @@ export function TeamScreen() {
   const [detail, setDetail] = useState<string | null>(null);
   const chars = state!.chars;
   const usedElsewhere = new Set(teams.flatMap((t, i) => (i === active ? [] : t.members)));
+  const synergies = evaluateSynergies(teams[active].members.map((id) => chars.find((c) => c.id === id)?.charKey).filter((k): k is string => !!k));
+  const totalBonus = describeBonus(combineBonus(synergies));
   const available = chars.filter((c) => !teams[active].members.includes(c.id) && !usedElsewhere.has(c.id));
 
   const toggle = (id: number) => {
@@ -91,6 +94,22 @@ export function TeamScreen() {
             );
           })}
         </div>
+      </div>
+
+      <div className="tile-cut mb-3 border border-emerald-400/20 bg-[#0d1730] p-3" data-testid="synergies">
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-emerald-300">🔗 Sinergias activas {synergies.length ? `· total ${totalBonus}` : ""}</p>
+        {synergies.length ? (
+          <ul className="space-y-1">
+            {synergies.map((sy) => (
+              <li key={sy.id} className="flex items-start gap-2 text-[11px] text-slate-300">
+                <span>{sy.icon}</span><span><b className="text-slate-100">{sy.name}</b> — {sy.desc}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[11px] text-slate-500">Combina héroes del mismo universo o elemento, o roles complementarios (Tanque + Sanador), para activar bonos. Se aplican automáticamente en combate.</p>
+        )}
+        <p className="mt-1.5 text-[9px] text-slate-500">Bono máximo por estadística: +35 %.</p>
       </div>
 
       <Btn className="mb-4 w-full" onClick={save} disabled={!dirty || busy}>
