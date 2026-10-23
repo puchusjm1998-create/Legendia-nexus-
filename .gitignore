@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+.pgdata/
+.tmp/
+npm-debug.log*
