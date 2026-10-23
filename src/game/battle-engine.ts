@@ -7,6 +7,7 @@ import {
 } from "./combat";
 import type { MissionDef } from "./missions";
 import type { StatusType } from "./catalog";
+import { combineBonus, evaluateSynergies } from "./synergy";
 
 export type BattlePhase = "playing" | "victory" | "defeat" | "retreated";
 export interface BattleSnapshot {
@@ -17,6 +18,8 @@ export interface BattleSnapshot {
   currentUid: number | null;
   phase: BattlePhase;
   revision: number;
+  /** Sinergias aplicadas al equipo aliado (opcional: partidas guardadas antes de v1.2 no lo tienen). */
+  synergies?: { id: string; name: string; icon: string; desc: string }[];
 }
 export type BattleCommand =
   | { type: "move"; x: number; y: number; revision: number }
@@ -28,6 +31,8 @@ export interface BattleEvent {
     "stun" | "wait" | "ultimate" | "bossPhase" | "end";
   uid?: number;
   targetUid?: number;
+  /** Qué acción originó el evento (permite vincular la animación al resultado real). */
+  action?: "attack" | "skill" | "ultimate";
   amount?: number;
   crit?: boolean;
   advantage?: number;
@@ -54,10 +59,20 @@ export function createBattle(members: OwnedLike[], mission: MissionDef,
   const allies = members.map((m, i) => makeAlly(m, i + 1, i, overrides.find((o) => o.charKey === m.charKey)?.mult));
   if (!allies.length || allies.length > 4) throw new BattleRuleError("Equipo inválido.");
   const enemies = mission.enemies.map((e, i) => makeEnemy(e, 1000 + i, i));
+  // Sinergias de formación: bonificación porcentual de stats a todo el equipo aliado.
+  const synergies = evaluateSynergies(allies.map((a) => a.key));
+  const bonus = combineBonus(synergies);
+  for (const a of allies) {
+    a.maxHp = Math.round(a.maxHp * (1 + bonus.hp)); a.hp = a.maxHp;
+    a.atk = Math.round(a.atk * (1 + bonus.atk));
+    a.def = Math.round(a.def * (1 + bonus.def));
+    a.spd = Math.round(a.spd * (1 + bonus.spd));
+  }
   const units = [...allies, ...enemies];
   const state: BattleSnapshot = {
     units, round: 1, order: turnOrder(units), cursor: -1,
     currentUid: null, phase: "playing", revision: 0,
+    synergies: synergies.map(({ id, name, icon, desc }) => ({ id, name, icon, desc })),
   };
   const frames: BattleFrame[] = [];
   advance(state, frames);
@@ -99,7 +114,7 @@ function perform(s: BattleSnapshot, frames: BattleFrame[], att: Unit,
   if (kind === "ultimate") {
     if (att.energy < 100) throw new BattleRuleError("La técnica definitiva necesita 100% de energía.");
     att.energy = 0;
-    frame(s, frames, { kind: "ultimate", uid: att.uid, label: att.ultimate.name });
+    frame(s, frames, { kind: "ultimate", uid: att.uid, action: "ultimate", label: att.ultimate.name });
   }
 
   const targets = definition?.aoe && definition.aoe > 0
@@ -112,10 +127,10 @@ function perform(s: BattleSnapshot, frames: BattleFrame[], att: Unit,
       if (power > 0) {
         const before = victim.hp;
         victim.hp = Math.min(victim.maxHp, victim.hp + healAmount(att, power, att.skillLevel));
-        frame(s, frames, { kind: "heal", uid: att.uid, targetUid: victim.uid, amount: victim.hp - before });
+        frame(s, frames, { kind: "heal", uid: att.uid, targetUid: victim.uid, action: kind, amount: victim.hp - before });
       }
       if (definition.effect && applyEffect(victim, definition.effect))
-        frame(s, frames, { kind: "status", uid: att.uid, targetUid: victim.uid, label: effectLabel(definition.effect.type) });
+        frame(s, frames, { kind: "status", uid: att.uid, targetUid: victim.uid, action: kind, label: effectLabel(definition.effect.type) });
     } else {
       const result = calcDamage(att, victim, power, allies, kind !== "attack", att.skillLevel);
       victim.hp = Math.max(0, victim.hp - result.dmg);
@@ -123,10 +138,10 @@ function perform(s: BattleSnapshot, frames: BattleFrame[], att: Unit,
         att.hp = Math.min(att.maxHp, att.hp + Math.round(result.dmg * att.passive.value));
       gainEnergy(victim, 10);
       if (definition?.effect && victim.hp > 0 && applyEffect(victim, definition.effect))
-        frame(s, frames, { kind: "status", uid: att.uid, targetUid: victim.uid, label: effectLabel(definition.effect.type) });
+        frame(s, frames, { kind: "status", uid: att.uid, targetUid: victim.uid, action: kind, label: effectLabel(definition.effect.type) });
       if (victim.hp === 0) victim.alive = false;
       frame(s, frames, {
-        kind: "damage", uid: att.uid, targetUid: victim.uid, amount: result.dmg,
+        kind: "damage", uid: att.uid, targetUid: victim.uid, action: kind, amount: result.dmg,
         crit: result.crit, combo: result.combo, advantage: result.mult,
       });
       if (checkBossPhase(victim))
@@ -238,9 +253,11 @@ export function applyPlayerAction(original: BattleSnapshot, raw: unknown): Engin
       break;
     }
     case "wait": {
+      // «Esperar» = guardia: +10 de energía y DEF +30% hasta su próximo turno.
       gainEnergy(actor, 10);
+      applyEffect(actor, { type: "defUp", chance: 1, turns: 1, value: 0.3 });
       s.revision++;
-      frame(s, frames, { kind: "wait", uid: actor.uid });
+      frame(s, frames, { kind: "wait", uid: actor.uid, label: "guard" });
       advance(s, frames);
       break;
     }

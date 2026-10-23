@@ -8,6 +8,9 @@ import { useGame } from "@/lib/store";
 import { Portrait } from "./Portrait";
 import { Btn } from "./ui";
 import { getAudio } from "@/game/audio";
+import { getCombatPrefs, setCombatPrefs } from "@/lib/prefs";
+import { resolveQuality } from "@/game3d/capability";
+import type { BattleStage, StagePick } from "@/game3d/stage";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 type Intent =
@@ -72,20 +75,88 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
   const [errorMessage, setErrorMessage] = useState("");
   const busyRef = useRef(false);
   const mounted = useRef(true);
+  const [mode, setMode] = useState<"pending" | "3d" | "2d">("pending");
+  const [speed, setSpeed] = useState<number>(() => getCombatPrefs().animSpeed);
+  const speedRef = useRef(speed);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<BattleStage | null>(null);
+  const pickRef = useRef<(p: StagePick) => void>(() => {});
+  const introDone = useRef(false);
+  const nap = useCallback((ms: number) => sleep(ms / speedRef.current), []);
+
+  const startPlay = useCallback(() => {
+    if (!mounted.current || introDone.current) return;
+    introDone.current = true;
+    if (data.snapshot.phase === "playing") setPhase("play");
+    else {
+      setResult({ victory: false, rewards: null });
+      setPhase("over");
+    }
+  }, [data.snapshot.phase]);
 
   useEffect(() => {
     mounted.current = true;
+    introDone.current = false;
     getAudio().playMusic("battle");
-    const timer = setTimeout(() => {
-      if (!mounted.current) return;
-      if (data.snapshot.phase === "playing") setPhase("play");
-      else {
-        setResult({ victory: false, rewards: null });
-        setPhase("over");
+    const q = resolveQuality(getCombatPrefs().quality);
+    setMode(q === "2d" ? "2d" : "3d");
+    return () => { mounted.current = false; };
+  }, [data.token]);
+
+  // Modo 2D clásico (o recuperación si el 3D falla): temporizador de introducción original.
+  useEffect(() => {
+    if (mode !== "2d") return;
+    const timer = setTimeout(startPlay, introDone.current ? 0 : 1100);
+    return () => clearTimeout(timer);
+  }, [mode, startPlay]);
+
+  // Modo 3D: se carga Three.js bajo demanda (carga progresiva) y se crea el escenario.
+  useEffect(() => {
+    if (mode !== "3d") return;
+    let cancelled = false;
+    let stage: BattleStage | null = null;
+    (async () => {
+      try {
+        const host = hostRef.current;
+        if (!host) throw new Error("sin contenedor");
+        const { BattleStage: Stage } = await import("@/game3d/stage");
+        if (cancelled) return;
+        const prefs = getCombatPrefs();
+        const q = resolveQuality(prefs.quality);
+        stage = new Stage({
+          host, quality: q === "low" ? "low" : "high",
+          mission: { id: data.mission.id, chapter: data.mission.chapter },
+          snapshot: latest.current, animSpeed: speedRef.current, skipUlt: prefs.skipUlt,
+          hooks: {
+            onSnapshot: (st) => { if (mounted.current) setMatch(st); },
+            sfx: (n) => getAudio().sfx(n),
+            banner: (t, ms) => { void showBannerRef.current(t, ms); },
+            pick: (p) => pickRef.current(p),
+            onContextLost: () => {
+              if (!mounted.current) return;
+              toast("Se perdió el contexto gráfico: continúo en modo 2D.", "err");
+              stageRef.current?.dispose(); stageRef.current = null; setMode("2d");
+            },
+          },
+        });
+        stageRef.current = stage;
+        (window as unknown as { __nexusStage?: BattleStage }).__nexusStage = stage;
+        if (latest.current.phase === "playing") await stage.intro();
+        else stage.applyState(latest.current, { teleport: true });
+        if (!cancelled) startPlay();
+      } catch (err) {
+        console.warn("[battle] 3D no disponible, uso el tablero 2D", err);
+        stage?.dispose(); stageRef.current = null;
+        if (!cancelled && mounted.current) setMode("2d");
       }
-    }, 1100);
-    return () => { mounted.current = false; clearTimeout(timer); };
-  }, [data.token, data.snapshot.phase]);
+    })();
+    return () => {
+      cancelled = true;
+      stage?.dispose();
+      if (stageRef.current === stage) stageRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, data.token]);
 
   const addFloat = useCallback((x: number, y: number, text: string, color: string, big = false) => {
     const id = ++floatId;
@@ -95,9 +166,11 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
 
   const showBanner = useCallback(async (text: string, ms = 850) => {
     setBanner(text);
-    await sleep(ms);
+    await nap(ms);
     if (mounted.current) setBanner(null);
-  }, []);
+  }, [nap]);
+  const showBannerRef = useRef(showBanner);
+  showBannerRef.current = showBanner;
 
   const animate = useCallback(async (f: BattleFrame) => {
     if (!mounted.current) return;
@@ -109,7 +182,7 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
       if (attacker) {
         setUlt(attacker);
         getAudio().sfx("ult");
-        await sleep(1450);
+        await nap(1450);
         if (!mounted.current) return;
         setFlash(true);
         setShake(true);
@@ -125,29 +198,29 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
       getAudio().sfx(e.crit ? "crit" : "hit");
       setShake(true);
       setTimeout(() => mounted.current && setShake(false), 300);
-      await sleep(320);
+      await nap(320);
     } else if (e.kind === "heal" && victim) {
       if (e.amount) { addFloat(victim.x, victim.y, `+${e.amount}`, "#4ade80"); getAudio().sfx("heal"); }
-      await sleep(240);
+      await nap(240);
     } else if (e.kind === "move") {
       getAudio().sfx("move");
-      await sleep(250);
+      await nap(250);
     } else if (e.kind === "status" && victim) {
       addFloat(victim.x, victim.y, e.label || "EFECTO", "#c4b5fd");
-      await sleep(150);
+      await nap(150);
     } else if (e.kind === "bossPhase") {
       await showBanner(`⚠️ ${e.label} · Su ataque aumenta`, 1150);
     } else if (e.kind === "stun") {
       if (victim) addFloat(victim.x, victim.y, "ATURDIDO 💫", "#fde047");
-      await sleep(290);
+      await nap(290);
     } else if (e.kind === "round") {
       await showBanner(e.label || "Nueva ronda", 500);
     } else if (e.kind === "turn") {
-      await sleep(f.state.units.find((u) => u.uid === e.uid)?.side === "enemy" ? 210 : 100);
+      await nap(f.state.units.find((u) => u.uid === e.uid)?.side === "enemy" ? 210 : 100);
     } else if (e.kind === "wait") {
-      await sleep(120);
+      await nap(120);
     }
-  }, [addFloat, showBanner]);
+  }, [addFloat, showBanner, nap]);
 
   const send = async (intent: Intent) => {
     if (busyRef.current || phase !== "play") return;
@@ -160,7 +233,8 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
         command: { ...intent, revision: latest.current.revision },
       });
       latest.current = res.snapshot;
-      for (const f of res.frames) {
+      if (stageRef.current) await stageRef.current.playFrames(res.frames, res.snapshot);
+      else for (const f of res.frames) {
         if (!mounted.current) return;
         await animate(f);
       }
@@ -179,6 +253,7 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
         if (mounted.current && active.token === data.token) {
           latest.current = active.snapshot;
           setMatch(active.snapshot);
+          stageRef.current?.sync(active.snapshot);
           toast(`Estado recuperado: ${(err as Error).message}`, "err");
         } else if (mounted.current) {
           setErrorMessage("No hay batalla activa. Revisa tu progreso: el servidor conserva las recompensas recibidas.");
@@ -235,6 +310,32 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
     setAction(action === type ? null : type);
   };
   const cellW = 100 / GRID_W, cellH = 100 / GRID_H;
+  pickRef.current = (p) => {
+    if (busyRef.current || !isPlayerTurn || !current) return;
+    if (p.kind === "tile") {
+      if (moveTiles.some((t) => t.x === p.x && t.y === p.y)) send({ type: "move", x: p.x, y: p.y });
+      return;
+    }
+    const u = units.find((x) => x.uid === p.uid);
+    if (!u) return;
+    if (action) { onUnitTap(u); return; }
+    // Atajo táctil: tocar un enemigo al alcance sin acción elegida = ataque básico.
+    if (u.side === "enemy" && u.alive && dist(u, current) <= current.range) send({ type: "attack", targetUid: u.uid });
+  };
+  if (stageRef.current) {
+    stageRef.current.setInteraction({
+      moveTiles: moveTiles.map((t) => ({ x: t.x, y: t.y })),
+      targets: validTargets.map((u) => ({ uid: u.uid, kind: u.side === "enemy" ? "enemy" as const : "ally" as const })),
+      currentUid: match.currentUid,
+    });
+  }
+  const cycleSpeed = () => {
+    const next = speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1;
+    setSpeed(next); speedRef.current = next;
+    stageRef.current?.setSpeed(next);
+    setCombatPrefs({ animSpeed: next });
+    api("game/settings", { animSpeed: next }).catch(() => {});
+  };
 
   return (
     <div className={`fixed inset-0 z-40 flex flex-col bg-[#070d1c] ${shake ? "anim-shake" : ""}`}>
@@ -262,6 +363,26 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
         })}
       </div>
 
+      {mode === "3d" ? (
+        <div className="relative z-10 min-h-0 w-full flex-1">
+          <div ref={hostRef} className="absolute inset-0" data-testid="stage3d" />
+          <div className="absolute right-2 top-2 z-20 flex gap-1.5">
+            <button onClick={cycleSpeed} className="btn-cut bg-black/55 px-2.5 py-1 text-[11px] font-bold text-amber-200" aria-label="Velocidad de animación">×{speed}</button>
+            {busy && phase === "play" && (
+              <button onClick={() => stageRef.current?.skip()} className="btn-cut bg-black/55 px-2.5 py-1 text-[11px] font-bold text-cyan-200" aria-label="Saltar animación">⏩ Saltar</button>
+            )}
+          </div>
+          {!!match.synergies?.length && (
+            <div className="pointer-events-none absolute left-2 top-2 z-20 flex max-w-[60%] flex-wrap gap-1">
+              {match.synergies.map((sy) => (
+                <span key={sy.id} title={sy.desc} className="rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-emerald-200">{sy.icon} {sy.name}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : mode === "pending" ? (
+        <div className="relative z-10 flex-1" />
+      ) : (
       <div className="relative z-10 mx-auto flex w-full max-w-lg flex-1 items-center px-2 py-2">
         <div className="relative w-full" style={{ aspectRatio: `${GRID_W}/${GRID_H}` }}>
           {Array.from({ length: GRID_H }).map((_, y) =>
@@ -312,6 +433,7 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
           ))}
         </div>
       </div>
+      )}
 
       <div className="relative z-10 border-t border-cyan-400/15 bg-[#0a1428]/95 px-3 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {current && isPlayerTurn ? (
@@ -363,7 +485,7 @@ export function Battle({ data, onFinish }: { data: BattleStart; onFinish: () => 
         </div>
       )}
       {phase === "intro" && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80">
+        <div className={`pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center ${mode === "3d" ? "bg-black/35" : "bg-black/80"}`}>
           <p className="anim-slash font-display text-3xl font-extrabold uppercase tracking-widest text-amber-300" style={{ textShadow: "0 0 24px #fbbf24" }}>¡Combate!</p>
           <p className="anim-rise mt-2 text-sm text-slate-300">{data.mission.name}</p>
         </div>
