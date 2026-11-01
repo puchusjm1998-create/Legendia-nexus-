@@ -1,0 +1,8 @@
+{
+  "name": "Legendia Nexus — RPG de Invocaciones",
+  "description": "RPG táctico de anime con invocaciones gacha, colección de héroes y combates por turnos. Servidor privado.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
